@@ -1,7 +1,9 @@
 //! chrome2linkedin-helper — localhost bridge between the Chrome extension and
-//! the LinkedIn /rest/posts API. Reuses the token file written by
-//! `li_push --auth` (from the li_push_rs project) so the client_secret never
-//! has to live inside the extension bundle.
+//! the LinkedIn /rest/posts API.
+//!
+//! Two subcommands:
+//!   `auth`   — run the OAuth dance and write ~/linkedin_token.json
+//!   `serve`  — run the localhost HTTP server (default if no arg given)
 
 use axum::{
     extract::State,
@@ -10,6 +12,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
@@ -20,6 +23,8 @@ use tower_http::cors::CorsLayer;
 
 const LINKEDIN_VERSION: &str = "202603";
 const DEFAULT_PORT: u16 = 8093;
+const AUTH_REDIRECT_URI: &str = "http://localhost:8092/callback";
+const AUTH_CALLBACK_PORT: u16 = 8092;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Credentials {
@@ -90,7 +95,7 @@ fn save_token(path: &Path, token: &Token) -> Result<(), String> {
 async fn refresh_token(state: &AppState) -> Result<Token, String> {
     let current = state.token.lock().await.clone();
     if current.refresh_token.is_empty() {
-        return Err("No refresh_token available. Re-run `li_push --auth`.".into());
+        return Err("No refresh_token available. Run `chrome2linkedin-helper auth`.".into());
     }
     let creds = load_credentials(&state.credentials_path)?;
     let resp = state
@@ -138,7 +143,7 @@ async fn create_post(
     if token.person_id.is_empty() {
         return Err((
             StatusCode::PRECONDITION_FAILED,
-            "Token has no person_id. Re-run `li_push --auth`.".into(),
+            "Token has no person_id. Re-run `chrome2linkedin-helper auth`.".into(),
         ));
     }
     let owner = format!("urn:li:person:{}", token.person_id);
@@ -241,8 +246,7 @@ async fn handle_status(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
-#[tokio::main]
-async fn main() {
+async fn run_server() {
     let port: u16 = env::var("CHROME2LINKEDIN_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -253,10 +257,7 @@ async fn main() {
 
     let token = load_token(&token_path).unwrap_or_else(|e| {
         eprintln!("ERROR: {}", e);
-        eprintln!(
-            "Run `li_push --auth` (from li_push_rs) to create {}.",
-            token_path.display()
-        );
+        eprintln!("Run `chrome2linkedin-helper auth` first.");
         std::process::exit(1);
     });
 
@@ -290,4 +291,217 @@ async fn main() {
     eprintln!("chrome2linkedin-helper listening on http://{}", addr);
     eprintln!("Endpoints: GET /status, POST /post");
     axum::serve(listener, app).await.expect("server");
+}
+
+async fn run_auth() {
+    let credentials_path = home_path("linkedin_credentials.json");
+    let token_path = home_path("linkedin_token.json");
+
+    let creds = load_credentials(&credentials_path).unwrap_or_else(|e| {
+        eprintln!("ERROR: {}", e);
+        eprintln!("Create {} with:", credentials_path.display());
+        eprintln!(r#"  {{"client_id": "...", "client_secret": "..."}}"#);
+        std::process::exit(1);
+    });
+
+    let auth_url = format!(
+        "https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={}&redirect_uri={}&scope=openid%20profile%20w_member_social",
+        urlencoding::encode(&creds.client_id),
+        urlencoding::encode(AUTH_REDIRECT_URI)
+    );
+
+    eprintln!("Opening browser for LinkedIn authorization...");
+    eprintln!("URL: {}\n", auth_url);
+    if let Err(e) = open::that(&auth_url) {
+        eprintln!("WARN: Could not open browser automatically: {}", e);
+        eprintln!("Open the URL above manually.");
+    }
+
+    // Best-effort cleanup of stale listeners on the callback port
+    if let Ok(output) = std::process::Command::new("lsof")
+        .args(["-ti", &format!(":{}", AUTH_CALLBACK_PORT)])
+        .output()
+    {
+        if !output.stdout.is_empty() {
+            for pid in String::from_utf8_lossy(&output.stdout).trim().lines() {
+                let _ = std::process::Command::new("kill").args(["-9", pid.trim()]).output();
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        }
+    }
+
+    eprintln!("Waiting for callback on {}...", AUTH_REDIRECT_URI);
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", AUTH_CALLBACK_PORT))
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("ERROR: bind 127.0.0.1:{}: {}", AUTH_CALLBACK_PORT, e);
+            std::process::exit(1);
+        });
+
+    let (mut socket, _) = listener.accept().await.expect("accept connection");
+    let mut buf = vec![0u8; 4096];
+    let n = tokio::io::AsyncReadExt::read(&mut socket, &mut buf)
+        .await
+        .expect("read request");
+    let request = String::from_utf8_lossy(&buf[..n]);
+
+    let query = request.split('?').nth(1).unwrap_or("");
+    let query = query.split(' ').next().unwrap_or(query);
+    let code_raw: String = query
+        .split('&')
+        .find(|p| p.starts_with("code="))
+        .and_then(|p| p.strip_prefix("code="))
+        .unwrap_or("")
+        .to_string();
+    let code = urlencoding::decode(&code_raw)
+        .unwrap_or(std::borrow::Cow::Borrowed(&code_raw))
+        .to_string();
+
+    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<h1>LinkedIn authorized. You can close this window.</h1>";
+    let _ = tokio::io::AsyncWriteExt::write_all(&mut socket, response.as_bytes()).await;
+
+    if code.is_empty() {
+        eprintln!("ERROR: No authorization code received.");
+        eprintln!("Raw request: {}", request);
+        std::process::exit(1);
+    }
+
+    eprintln!("Authorization code received. Exchanging for token...");
+    let client = reqwest::Client::new();
+    let token_resp = client
+        .post("https://www.linkedin.com/oauth/v2/accessToken")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(format!(
+            "grant_type=authorization_code&code={}&redirect_uri={}&client_id={}&client_secret={}",
+            urlencoding::encode(&code),
+            urlencoding::encode(AUTH_REDIRECT_URI),
+            urlencoding::encode(&creds.client_id),
+            urlencoding::encode(&creds.client_secret)
+        ))
+        .send()
+        .await
+        .expect("token exchange request failed");
+
+    let token_status = token_resp.status();
+    let token_text = token_resp.text().await.expect("read token response");
+
+    if !token_status.is_success() {
+        eprintln!("ERROR: Token exchange failed ({}): {}", token_status, token_text);
+        std::process::exit(1);
+    }
+
+    let token_data: serde_json::Value = serde_json::from_str(&token_text).unwrap_or_else(|e| {
+        eprintln!("ERROR: Failed to parse token response: {}\n{}", e, token_text);
+        std::process::exit(1);
+    });
+
+    if let Some(err) = token_data.get("error") {
+        eprintln!("ERROR: Token exchange failed: {}", err);
+        eprintln!(
+            "Description: {}",
+            token_data.get("error_description").unwrap_or(&serde_json::Value::Null)
+        );
+        std::process::exit(1);
+    }
+
+    let access_token = token_data["access_token"].as_str().unwrap_or("").to_string();
+    let refresh_token_str = token_data["refresh_token"].as_str().unwrap_or("").to_string();
+    let expires_in = token_data["expires_in"].as_u64().unwrap_or(0);
+
+    if access_token.is_empty() {
+        eprintln!("ERROR: No access_token in response: {}", token_text);
+        std::process::exit(1);
+    }
+
+    // Prefer the `sub` claim from the id_token JWT (returned with openid scope).
+    let mut person_id = String::new();
+    if let Some(id_token) = token_data["id_token"].as_str() {
+        let parts: Vec<&str> = id_token.split('.').collect();
+        if parts.len() >= 2 {
+            let payload = parts[1];
+            let padded = match payload.len() % 4 {
+                2 => format!("{}==", payload),
+                3 => format!("{}=", payload),
+                _ => payload.to_string(),
+            };
+            if let Ok(decoded) = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(padded.trim_end_matches('='))
+            {
+                if let Ok(claims) = serde_json::from_slice::<serde_json::Value>(&decoded) {
+                    if let Some(sub) = claims["sub"].as_str() {
+                        person_id = sub.to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to /v2/userinfo
+    if person_id.is_empty() {
+        if let Ok(resp) = client
+            .get("https://api.linkedin.com/v2/userinfo")
+            .header("Authorization", format!("Bearer {}", access_token))
+            .send()
+            .await
+        {
+            if resp.status().is_success() {
+                if let Ok(text) = resp.text().await {
+                    if let Ok(data) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if let Some(sub) = data["sub"].as_str() {
+                            person_id = sub.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if person_id.is_empty() {
+        eprintln!("ERROR: Could not determine person_id from id_token or /v2/userinfo.");
+        std::process::exit(1);
+    }
+
+    let token = Token {
+        access_token,
+        refresh_token: refresh_token_str,
+        person_id: person_id.clone(),
+        expires_in,
+    };
+
+    save_token(&token_path, &token).unwrap_or_else(|e| {
+        eprintln!("ERROR: save token: {}", e);
+        std::process::exit(1);
+    });
+
+    eprintln!("Token saved to {}", token_path.display());
+    eprintln!("Person ID: {}", person_id);
+    eprintln!("Expires in: {} seconds", expires_in);
+    eprintln!("Ready. Start the server with: chrome2linkedin-helper");
+}
+
+fn print_usage() {
+    eprintln!("chrome2linkedin-helper — LinkedIn posting bridge for the Chrome extension");
+    eprintln!();
+    eprintln!("Usage:");
+    eprintln!("  chrome2linkedin-helper           Run the localhost HTTP server (default)");
+    eprintln!("  chrome2linkedin-helper serve     Same as above");
+    eprintln!("  chrome2linkedin-helper auth      Run the OAuth flow and write ~/linkedin_token.json");
+    eprintln!();
+    eprintln!("Environment:");
+    eprintln!("  CHROME2LINKEDIN_PORT             Override the server port (default {})", DEFAULT_PORT);
+}
+
+#[tokio::main]
+async fn main() {
+    let args: Vec<String> = env::args().collect();
+    match args.get(1).map(|s| s.as_str()) {
+        Some("auth") => run_auth().await,
+        None | Some("serve") => run_server().await,
+        Some("-h") | Some("--help") | Some("help") => print_usage(),
+        Some(other) => {
+            eprintln!("Unknown subcommand: {}", other);
+            print_usage();
+            std::process::exit(1);
+        }
+    }
 }
