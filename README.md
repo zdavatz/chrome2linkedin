@@ -47,4 +47,6 @@ The helper handles both the one-time OAuth flow and the runtime posting + token 
 
 Click the toolbar icon, type your post, pick visibility (Public / Connections only), submit. The popup shows the resulting post URL.
 
-The helper transparently refreshes the access token on 401 using the saved refresh token and credentials, so re-running `auth` is only needed if you change scopes or revoke the app.
+The helper escapes LinkedIn's "Little Text" control characters (`( ) < > @ | { } [ ] * _ ~ \`) in your post before sending, so things like `(38:15)` render literally instead of silently truncating the post.
+
+Access tokens last ~60 days. If your LinkedIn app has the Refresh Token product enabled, the helper auto-refreshes on 401. Otherwise (the default for Sign-In-with-LinkedIn Standard Tier), re-run `cargo run --release -- auth` when the token expires.
