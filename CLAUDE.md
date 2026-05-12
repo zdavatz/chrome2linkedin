@@ -11,7 +11,7 @@ Chrome extension (Manifest V3) that posts text to the user's LinkedIn feed via t
 ```
 [ Chrome extension popup ] --HTTP--> [ helper on 127.0.0.1:8093 ] --HTTPS--> [ api.linkedin.com ]
                                             ^
-                                            └─ reads ~/linkedin_credentials.json (manual)
+                                            └─ reads ~/.linkedin_credentials.json (manual)
                                                      ~/linkedin_token.json     (written by `helper auth`)
 ```
 
@@ -27,7 +27,7 @@ Chrome extension (Manifest V3) that posts text to the user's LinkedIn feed via t
 
 Two JSON files in `$HOME`:
 
-- `linkedin_credentials.json` — `{ client_id, client_secret }`. **Created manually** by the user from the LinkedIn Developer App's Auth tab. Never written by the helper.
+- `.linkedin_credentials.json` — `{ client_id, client_secret }`. **Created manually** by the user from the LinkedIn Developer App's Auth tab. Never written by the helper.
 - `linkedin_token.json` — `{ access_token, refresh_token, person_id, expires_in }`. Written by `helper auth`; rewritten in place on every successful refresh.
 
 Posting author URN format: `urn:li:person:<person_id>`. If LinkedIn bumps the API version, update `LINKEDIN_VERSION` in `helper/src/main.rs`.
@@ -35,7 +35,7 @@ Posting author URN format: `urn:li:person:<person_id>`. If LinkedIn bumps the AP
 ## Build & run
 
 ```sh
-# 1. One-time: write ~/linkedin_credentials.json yourself, then:
+# 1. One-time: write ~/.linkedin_credentials.json yourself, then:
 cd helper && cargo run --release -- auth
 
 # 2. Start the local helper

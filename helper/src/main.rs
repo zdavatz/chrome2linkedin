@@ -252,7 +252,7 @@ async fn run_server() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_PORT);
 
-    let credentials_path = home_path("linkedin_credentials.json");
+    let credentials_path = home_path(".linkedin_credentials.json");
     let token_path = home_path("linkedin_token.json");
 
     let token = load_token(&token_path).unwrap_or_else(|e| {
@@ -294,7 +294,7 @@ async fn run_server() {
 }
 
 async fn run_auth() {
-    let credentials_path = home_path("linkedin_credentials.json");
+    let credentials_path = home_path(".linkedin_credentials.json");
     let token_path = home_path("linkedin_token.json");
 
     let creds = load_credentials(&credentials_path).unwrap_or_else(|e| {

@@ -9,7 +9,7 @@ The extension is intentionally thin and talks to a small local helper service so
 ```
 [ extension popup ] --HTTP--> [ helper on 127.0.0.1:8093 ] --HTTPS--> api.linkedin.com
                                        ^
-                                       reads ~/linkedin_credentials.json
+                                       reads ~/.linkedin_credentials.json
                                             ~/linkedin_token.json
 ```
 
@@ -22,7 +22,7 @@ The helper handles both the one-time OAuth flow and the runtime posting + token 
    - **Products** tab → request both **Sign In with LinkedIn using OpenID Connect** and **Share on LinkedIn**.
    - Copy **Client ID** and **Primary Client Secret**.
 
-2. **Save credentials** to `~/linkedin_credentials.json`:
+2. **Save credentials** to `~/.linkedin_credentials.json`:
    ```json
    { "client_id": "...", "client_secret": "..." }
    ```
