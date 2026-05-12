@@ -45,7 +45,12 @@ The helper handles both the one-time OAuth flow and the runtime posting + token 
    - Enable **Developer mode**
    - **Load unpacked** → select the `extension/` directory
 
-Click the toolbar icon, type your post, pick visibility (Public / Connections only), submit. The popup shows the resulting post URL.
+The popup has two tabs:
+
+- **Compose** — write a post, pick visibility (Public / Connections only), submit. The popup shows the resulting post URL.
+- **Recent** — list of posts you've made through this extension, with **Edit** and **Delete** buttons per post. Delete uses a two-click inline confirm.
+
+The Recent tab reads from a local log at `~/.linkedin_post_log.json` (written by the helper on every successful post). LinkedIn's "list my posts" API endpoint is gated behind a higher product tier than Share-on-LinkedIn Default, so we keep our own log rather than query LinkedIn. Pre-existing posts created outside this extension don't appear in Recent.
 
 The helper escapes LinkedIn's "Little Text" control characters (`( ) < > @ | { } [ ] * _ ~ \`) in your post before sending, so things like `(38:15)` render literally instead of silently truncating the post.
 

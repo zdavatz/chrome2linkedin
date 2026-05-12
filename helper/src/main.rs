@@ -106,6 +106,40 @@ fn save_token(path: &Path, token: &Token) -> Result<(), String> {
     fs::write(path, json).map_err(|e| e.to_string())
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct LogEntry {
+    urn: String,
+    commentary: String,
+    created_at: u64,
+    visibility: String,
+    url: String,
+    #[serde(default)]
+    edited_at: u64,
+}
+
+fn log_path() -> PathBuf {
+    home_path(".linkedin_post_log.json")
+}
+
+fn load_log() -> Vec<LogEntry> {
+    fs::read_to_string(log_path())
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_log(entries: &[LogEntry]) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(entries).map_err(|e| e.to_string())?;
+    fs::write(log_path(), json).map_err(|e| e.to_string())
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 async fn refresh_token(state: &AppState) -> Result<Token, String> {
     let current = state.token.lock().await.clone();
     if current.refresh_token.is_empty() {
@@ -227,6 +261,21 @@ async fn create_post(
         .unwrap_or("(unknown)")
         .to_string();
     let post_url = format!("https://www.linkedin.com/feed/update/{}/", post_id);
+
+    if !post_id.is_empty() && post_id != "(unknown)" {
+        let entry = LogEntry {
+            urn: post_id.clone(),
+            commentary: body.commentary.clone(),
+            created_at: now_secs(),
+            visibility: visibility.to_string(),
+            url: post_url.clone(),
+            edited_at: 0,
+        };
+        let mut log = load_log();
+        log.insert(0, entry);
+        let _ = save_log(&log);
+    }
+
     Ok(PostResponse { post_id, post_url })
 }
 
@@ -249,6 +298,159 @@ async fn handle_post(
             .into_response(),
         Err((code, msg)) => (code, Json(serde_json::json!({ "error": msg }))).into_response(),
     }
+}
+
+#[derive(Deserialize)]
+struct UrnRequest {
+    urn: String,
+}
+
+#[derive(Deserialize)]
+struct EditRequest {
+    urn: String,
+    commentary: String,
+}
+
+async fn linkedin_request<F, Fut>(state: &AppState, build: F) -> Result<reqwest::Response, String>
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = Result<reqwest::Response, reqwest::Error>>,
+{
+    let token = state.token.lock().await.access_token.clone();
+    let resp = build(token).await.map_err(|e| format!("linkedin request: {}", e))?;
+    if resp.status() == StatusCode::UNAUTHORIZED {
+        let new_token = refresh_token(state).await?;
+        return build(new_token.access_token)
+            .await
+            .map_err(|e| format!("linkedin request: {}", e));
+    }
+    Ok(resp)
+}
+
+// Recent posts come from a local log written on every successful create.
+// LinkedIn's listing endpoint (partnerApiPostsExternal.FINDER-author) is gated
+// behind a higher product tier than Share-on-LinkedIn Default, so we cannot
+// fetch the user's posts from LinkedIn directly with the scopes we have.
+async fn handle_list_posts() -> impl IntoResponse {
+    let log = load_log();
+    (StatusCode::OK, Json(serde_json::json!({ "posts": log }))).into_response()
+}
+
+async fn handle_edit_post(
+    State(state): State<AppState>,
+    Json(body): Json<EditRequest>,
+) -> impl IntoResponse {
+    if body.urn.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error":"urn required"})))
+            .into_response();
+    }
+    if body.commentary.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error":"commentary cannot be empty"})),
+        )
+            .into_response();
+    }
+    let escaped = escape_little_text(&body.commentary);
+    let url = format!(
+        "https://api.linkedin.com/rest/posts/{}",
+        urlencoding::encode(&body.urn)
+    );
+    let patch_body = serde_json::json!({
+        "patch": { "$set": { "commentary": escaped } }
+    });
+
+    let send = |t: String| {
+        let url = url.clone();
+        let patch_body = patch_body.clone();
+        let client = state.client.clone();
+        async move {
+            client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", t))
+                .header("Content-Type", "application/json")
+                .header("LinkedIn-Version", LINKEDIN_VERSION)
+                .header("X-Restli-Protocol-Version", "2.0.0")
+                .header("X-RestLi-Method", "PARTIAL_UPDATE")
+                .json(&patch_body)
+                .send()
+                .await
+        }
+    };
+
+    let resp = match linkedin_request(&state, send).await {
+        Ok(r) => r,
+        Err(e) => {
+            return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": e})))
+                .into_response()
+        }
+    };
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return (
+            StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({"error": format!("linkedin {}: {}", status, text)})),
+        )
+            .into_response();
+    }
+    let mut log = load_log();
+    for e in log.iter_mut() {
+        if e.urn == body.urn {
+            e.commentary = body.commentary.clone();
+            e.edited_at = now_secs();
+        }
+    }
+    let _ = save_log(&log);
+    (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+}
+
+async fn handle_delete_post(
+    State(state): State<AppState>,
+    Json(body): Json<UrnRequest>,
+) -> impl IntoResponse {
+    if body.urn.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error":"urn required"})))
+            .into_response();
+    }
+    let url = format!(
+        "https://api.linkedin.com/rest/posts/{}",
+        urlencoding::encode(&body.urn)
+    );
+
+    let send = |t: String| {
+        let url = url.clone();
+        let client = state.client.clone();
+        async move {
+            client
+                .delete(&url)
+                .header("Authorization", format!("Bearer {}", t))
+                .header("LinkedIn-Version", LINKEDIN_VERSION)
+                .header("X-Restli-Protocol-Version", "2.0.0")
+                .send()
+                .await
+        }
+    };
+
+    let resp = match linkedin_request(&state, send).await {
+        Ok(r) => r,
+        Err(e) => {
+            return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": e})))
+                .into_response()
+        }
+    };
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return (
+            StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({"error": format!("linkedin {}: {}", status, text)})),
+        )
+            .into_response();
+    }
+    let log: Vec<LogEntry> = load_log().into_iter().filter(|e| e.urn != body.urn).collect();
+    let _ = save_log(&log);
+    (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
 }
 
 async fn handle_status(State(state): State<AppState>) -> impl IntoResponse {
@@ -292,6 +494,9 @@ async fn run_server() {
     let app = Router::new()
         .route("/status", get(handle_status))
         .route("/post", post(handle_post))
+        .route("/posts", get(handle_list_posts))
+        .route("/posts/edit", post(handle_edit_post))
+        .route("/posts/delete", post(handle_delete_post))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -303,7 +508,7 @@ async fn run_server() {
             std::process::exit(1);
         });
     eprintln!("chrome2linkedin-helper listening on http://{}", addr);
-    eprintln!("Endpoints: GET /status, POST /post");
+    eprintln!("Endpoints: GET /status, POST /post, GET /posts, POST /posts/edit, POST /posts/delete");
     axum::serve(listener, app).await.expect("server");
 }
 

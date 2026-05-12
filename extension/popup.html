@@ -6,18 +6,31 @@
 <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-<form id="post-form">
-  <textarea id="commentary" rows="6" placeholder="What do you want to share?" maxlength="3000" required></textarea>
-  <div class="row">
-    <label for="visibility">Visibility</label>
-    <select id="visibility">
-      <option value="PUBLIC" selected>Public</option>
-      <option value="CONNECTIONS">Connections only</option>
-    </select>
-  </div>
-  <button type="submit" id="submit">Post</button>
-  <div id="status" class="status" role="status" aria-live="polite"></div>
-</form>
+<nav class="tabs">
+  <button type="button" class="tab active" data-tab="compose">Compose</button>
+  <button type="button" class="tab" data-tab="recent">Recent</button>
+</nav>
+
+<section id="view-compose" class="view">
+  <form id="post-form">
+    <textarea id="commentary" rows="6" placeholder="What do you want to share?" maxlength="3000" required></textarea>
+    <div class="row">
+      <label for="visibility">Visibility</label>
+      <select id="visibility">
+        <option value="PUBLIC" selected>Public</option>
+        <option value="CONNECTIONS">Connections only</option>
+      </select>
+    </div>
+    <button type="submit" id="submit">Post</button>
+  </form>
+  <div id="compose-status" class="status" role="status" aria-live="polite"></div>
+</section>
+
+<section id="view-recent" class="view hidden">
+  <div id="recent-status" class="status" role="status" aria-live="polite"></div>
+  <ul id="recent-list" class="recent-list"></ul>
+</section>
+
 <script src="popup.js"></script>
 </body>
 </html>
