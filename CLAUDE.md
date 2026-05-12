@@ -12,11 +12,11 @@ Chrome extension (Manifest V3) that posts text to the user's LinkedIn feed via t
 [ Chrome extension popup ] --HTTP--> [ helper on 127.0.0.1:8093 ] --HTTPS--> [ api.linkedin.com ]
                                             ^
                                             └─ reads ~/.linkedin_credentials.json (manual)
-                                                     ~/linkedin_token.json     (written by `helper auth`)
+                                                     ~/.linkedin_token.json     (written by `helper auth`)
 ```
 
 - **`helper/`** — Rust crate (axum + tokio + reqwest). Single binary with two subcommands:
-  - `auth` — runs the OAuth dance: opens the browser, listens on `127.0.0.1:8092/callback`, exchanges the code for a token, decodes the id_token JWT's `sub` claim to get the `person_id`, and writes `~/linkedin_token.json`. Falls back to `GET /v2/userinfo` if the JWT path fails. Best-effort kills any stale listener on port 8092 via `lsof` (no-op on systems without it).
+  - `auth` — runs the OAuth dance: opens the browser, listens on `127.0.0.1:8092/callback`, exchanges the code for a token, decodes the id_token JWT's `sub` claim to get the `person_id`, and writes `~/.linkedin_token.json`. Falls back to `GET /v2/userinfo` if the JWT path fails. Best-effort kills any stale listener on port 8092 via `lsof` (no-op on systems without it).
   - server mode (default, or `serve`):
     - `GET /status` — returns `{ has_token, person_id_present, refresh_token_present }`. The popup probes this on open and disables the submit button when the token is missing.
     - `POST /post` — body `{ commentary, visibility }` → calls LinkedIn `POST /rest/posts`, returns `{ post_id, post_url }`. On a 401 from LinkedIn it transparently refreshes the access token using the saved `refresh_token` + credentials and retries once.
@@ -28,7 +28,7 @@ Chrome extension (Manifest V3) that posts text to the user's LinkedIn feed via t
 Two JSON files in `$HOME`:
 
 - `.linkedin_credentials.json` — `{ client_id, client_secret }`. **Created manually** by the user from the LinkedIn Developer App's Auth tab. Never written by the helper.
-- `linkedin_token.json` — `{ access_token, refresh_token, person_id, expires_in }`. Written by `helper auth`; rewritten in place on every successful refresh.
+- `.linkedin_token.json` — `{ access_token, refresh_token, person_id, expires_in }`. Written by `helper auth`; rewritten in place on every successful refresh.
 
 Posting author URN format: `urn:li:person:<person_id>`. If LinkedIn bumps the API version, update `LINKEDIN_VERSION` in `helper/src/main.rs`.
 

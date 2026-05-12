@@ -10,7 +10,7 @@ The extension is intentionally thin and talks to a small local helper service so
 [ extension popup ] --HTTP--> [ helper on 127.0.0.1:8093 ] --HTTPS--> api.linkedin.com
                                        ^
                                        reads ~/.linkedin_credentials.json
-                                            ~/linkedin_token.json
+                                            ~/.linkedin_token.json
 ```
 
 The helper handles both the one-time OAuth flow and the runtime posting + token refresh — this repo has no external dependencies beyond a LinkedIn Developer App.
@@ -32,7 +32,7 @@ The helper handles both the one-time OAuth flow and the runtime posting + token 
    cd helper
    cargo run --release -- auth
    ```
-   Opens your browser, catches the callback on port 8092, writes `~/linkedin_token.json`.
+   Opens your browser, catches the callback on port 8092, writes `~/.linkedin_token.json`.
 
 4. **Start the helper**:
    ```sh
