@@ -24,6 +24,12 @@
     <button type="submit" id="submit">Post</button>
   </form>
   <div id="compose-status" class="status" role="status" aria-live="polite"></div>
+  <div id="helper-cmd" class="helper-cmd hidden">
+    <div class="helper-cmd-label">Run this in Terminal to start the helper in the background:</div>
+    <pre><code id="helper-cmd-text">nohup ~/software/chrome2linkedin/helper/target/release/chrome2linkedin-helper &gt;/tmp/c2l-helper.log 2&gt;&amp;1 &amp;
+disown</code></pre>
+    <button type="button" id="helper-cmd-copy" class="btn-secondary">Copy</button>
+  </div>
 </section>
 
 <section id="view-recent" class="view hidden">

@@ -12,6 +12,9 @@ const submit = document.getElementById('submit');
 const composeStatus = document.getElementById('compose-status');
 const recentStatus = document.getElementById('recent-status');
 const recentList = document.getElementById('recent-list');
+const helperCmd = document.getElementById('helper-cmd');
+const helperCmdCopy = document.getElementById('helper-cmd-copy');
+const helperCmdText = document.getElementById('helper-cmd-text');
 
 function setStatus(el, content, kind) {
   el.textContent = '';
@@ -205,8 +208,20 @@ async function handleDelete(li, post, btn) {
   } catch (e) {
     setStatus(composeStatus, 'Helper not reachable at ' + HELPER + '. Start chrome2linkedin-helper.', 'error');
     submit.disabled = true;
+    helperCmd.classList.remove('hidden');
   }
 })();
+
+helperCmdCopy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(helperCmdText.textContent);
+    const original = helperCmdCopy.textContent;
+    helperCmdCopy.textContent = 'Copied';
+    setTimeout(() => { helperCmdCopy.textContent = original; }, 1500);
+  } catch {
+    helperCmdCopy.textContent = 'Copy failed';
+  }
+});
 
 commentary.addEventListener('input', () => {
   chrome.storage.local.set({ draft: commentary.value });

@@ -1,5 +1,6 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 18px;
   margin: 0;
   padding: 12px;
   width: 380px;
@@ -36,6 +37,26 @@ body {
   font-weight: 600;
 }
 .view.hidden { display: none; }
+.hidden { display: none; }
+.helper-cmd { margin-top: 8px; }
+.helper-cmd-label { font-size: 13px; color: #555; margin-bottom: 4px; }
+.helper-cmd pre {
+  background: #f3f3f3;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0 0 6px 0;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.helper-cmd button {
+  padding: 4px 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+#post-form { font-size: 93%; }
 textarea {
   width: 100%;
   box-sizing: border-box;
@@ -68,7 +89,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 form button[type="submit"] { width: 100%; }
 .status {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 14px;
   min-height: 1.2em;
   word-break: break-all;
 }
@@ -88,12 +109,12 @@ form button[type="submit"] { width: 100%; }
   margin-bottom: 8px;
 }
 .recent-item .meta {
-  font-size: 11px;
+  font-size: 13px;
   color: #888;
   margin-bottom: 4px;
 }
 .recent-item .text {
-  font-size: 13px;
+  font-size: 15px;
   white-space: pre-wrap;
   word-break: break-word;
   margin-bottom: 6px;
@@ -104,7 +125,7 @@ form button[type="submit"] { width: 100%; }
   position: relative;
 }
 .recent-item textarea {
-  font-size: 13px;
+  font-size: 15px;
   margin-bottom: 6px;
 }
 .recent-actions {
@@ -113,7 +134,7 @@ form button[type="submit"] { width: 100%; }
 }
 .recent-actions button {
   padding: 4px 8px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 .btn-secondary {
@@ -124,7 +145,7 @@ form button[type="submit"] { width: 100%; }
 .btn-danger.confirming { background: #d93025; }
 .empty {
   color: #888;
-  font-size: 12px;
+  font-size: 14px;
   text-align: center;
   padding: 24px 0;
 }
