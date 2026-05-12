@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "chrome2linkedin",
+  "version": "0.1.0",
+  "description": "Post text to your LinkedIn feed via a local helper service.",
+  "action": {
+    "default_title": "Post to LinkedIn",
+    "default_popup": "popup.html"
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["http://localhost:8093/*"]
+}

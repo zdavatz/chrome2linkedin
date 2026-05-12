@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Post to LinkedIn</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<form id="post-form">
+  <textarea id="commentary" rows="6" placeholder="What do you want to share?" maxlength="3000" required></textarea>
+  <div class="row">
+    <label for="visibility">Visibility</label>
+    <select id="visibility">
+      <option value="PUBLIC" selected>Public</option>
+      <option value="CONNECTIONS">Connections only</option>
+    </select>
+  </div>
+  <button type="submit" id="submit">Post</button>
+  <div id="status" class="status" role="status" aria-live="polite"></div>
+</form>
+<script src="popup.js"></script>
+</body>
+</html>
