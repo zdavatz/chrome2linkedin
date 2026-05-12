@@ -62,6 +62,20 @@ fn default_visibility() -> String {
     "PUBLIC".to_string()
 }
 
+// LinkedIn's `commentary` field uses their "Little Text" format where these
+// chars are control characters and must be backslash-escaped to render
+// literally. Unescaped `(` in particular causes silent truncation.
+fn escape_little_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if matches!(c, '(' | ')' | '<' | '>' | '@' | '|' | '{' | '}' | '[' | ']' | '*' | '_' | '~' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 #[derive(Serialize)]
 struct PostResponse {
     post_id: String,
@@ -154,7 +168,7 @@ async fn create_post(
 
     let post_body = serde_json::json!({
         "author": owner,
-        "commentary": body.commentary,
+        "commentary": escape_little_text(&body.commentary),
         "visibility": visibility,
         "distribution": {
             "feedDistribution": "MAIN_FEED",
