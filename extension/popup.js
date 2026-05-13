@@ -192,6 +192,13 @@ async function handleDelete(li, post, btn) {
   }
 }
 
+chrome.runtime.getPlatformInfo().then((info) => {
+  const path = info.os === 'mac'
+    ? '~/software/chrome2linkedin/helper/target/release/chrome2linkedin-helper'
+    : '~/.software/chrome2linkedin/helper/target/release/chrome2linkedin-helper';
+  helperCmdText.textContent = `nohup ${path} >/tmp/c2l-helper.log 2>&1 &\ndisown`;
+});
+
 (async () => {
   const saved = await chrome.storage.local.get(['draft', 'visibility']);
   if (saved.draft) commentary.value = saved.draft;
