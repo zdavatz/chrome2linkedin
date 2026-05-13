@@ -55,3 +55,5 @@ The Recent tab reads from a local log at `~/.linkedin_post_log.json` (written by
 The helper escapes LinkedIn's "Little Text" control characters (`( ) < > @ | { } [ ] * _ ~ \`) in your post before sending, so things like `(38:15)` render literally instead of silently truncating the post.
 
 Access tokens last ~60 days. If your LinkedIn app has the Refresh Token product enabled, the helper auto-refreshes on 401. Otherwise (the default for Sign-In-with-LinkedIn Standard Tier), re-run `cargo run --release -- auth` when the token expires.
+
+If the helper isn't running when you open the popup, the Compose view shows a copy-paste `nohup …` snippet to start it in the background. The path adapts to your OS (`~/software/...` on macOS, `~/.software/...` on Linux); if you cloned the repo elsewhere, edit the snippet in `extension/popup.js`.

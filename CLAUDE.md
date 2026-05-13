@@ -24,7 +24,7 @@ Chrome extension (Manifest V3) that posts text to the user's LinkedIn feed via t
     - `POST /posts/edit` — body `{ urn, commentary }` → LinkedIn `POST /rest/posts/{urn}` with `X-RestLi-Method: PARTIAL_UPDATE` patching `commentary`. Re-escapes Little Text. Updates the log entry's commentary + `edited_at` on success.
     - `POST /posts/delete` — body `{ urn }` → LinkedIn `DELETE /rest/posts/{urn}`. Removes the entry from the log on success.
   - Constants worth knowing: `LINKEDIN_VERSION = "202603"` (LinkedIn versioned API header), `DEFAULT_PORT = 8093` (overridable via `CHROME2LINKEDIN_PORT`), `AUTH_CALLBACK_PORT = 8092` (must match an Authorized redirect URL configured on the LinkedIn app).
-- **`extension/`** — MV3 extension. `manifest.json` declares only `storage` permission plus `host_permissions` for `http://localhost:8093/*`. `popup.js` persists the textarea draft and visibility choice in `chrome.storage.local` so reopening the popup restores in-progress text.
+- **`extension/`** — MV3 extension. `manifest.json` declares only `storage` permission plus `host_permissions` for `http://localhost:8093/*`. `popup.js` persists the textarea draft and visibility choice in `chrome.storage.local` so reopening the popup restores in-progress text. The popup has two tabs (Compose / Recent) and, when `/status` is unreachable, surfaces a copy-paste `nohup …` snippet to start the helper. The snippet's binary path is OS-aware via `chrome.runtime.getPlatformInfo()` — currently hardcoded to `~/software/chrome2linkedin/...` on macOS and `~/.software/chrome2linkedin/...` on every other platform (Linux). If a user clones the repo elsewhere they have to edit `popup.js`.
 
 ## Token files
 
